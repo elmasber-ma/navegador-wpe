@@ -38,13 +38,14 @@ jobs:
       - name: Debug wpeview API real
         if: always()
         run: |
-          echo "HOME=$HOME"
-          AAR=$(find "$HOME/.gradle" -name "wpeview-*.aar" 2>/dev/null | head -n 1)
-          echo "AAR=$AAR"
-          ls -la "$AAR"
-          rm -rf /tmp/wpedbg && mkdir -p /tmp/wpedbg
-          unzip -o -q "$AAR" classes.jar -d /tmp/wpedbg
-          javap -classpath /tmp/wpedbg/classes.jar org.wpewebkit.wpeview.WPEView | head -n 40
+          echo "=== todos los wpeview en cache ==="
+          find "$HOME/.gradle" -path "*wpewebkit*" -name "*.aar" -o -path "*wpewebkit*" -name "*.jar" 2>/dev/null | head -n 20
+          for A in $(find "$HOME/.gradle" -path "*wpewebkit*" \( -name "*.aar" -o -name "*.jar" \) 2>/dev/null); do
+            echo "--- $A ($(stat -c%s "$A"))"
+            rm -rf /tmp/wpedbg && mkdir -p /tmp/wpedbg
+            unzip -o -q "$A" classes.jar -d /tmp/wpedbg 2>/dev/null || cp "$A" /tmp/wpedbg/classes.jar
+            javap -classpath /tmp/wpedbg/classes.jar org.wpewebkit.wpeview.WPEView 2>&1 | grep -E "WPEView\(|loadUrl|setWPE" | head -n 12
+          done
 
       - name: Build APK (Gradle full)
         uses: gradle/gradle-build-action@v2
