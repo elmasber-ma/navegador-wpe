@@ -28,6 +28,14 @@ jobs:
         with:
           packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
+      - name: Debug wpeview API real
+        run: |
+          find ~/.gradle -name "wpeview-*.aar" 2>/dev/null
+          AAR=$(find ~/.gradle -name "wpeview-*.aar" 2>/dev/null | head -n 1)
+          echo "AAR=$AAR"
+          unzip -o -q "$AAR" classes.jar -d /tmp/wpedbg
+          javap -classpath /tmp/wpedbg/classes.jar org.wpewebkit.wpeview.WPEView | head -n 40
+
       - name: Build APK (Gradle)
         uses: gradle/gradle-build-action@v2
         with:
