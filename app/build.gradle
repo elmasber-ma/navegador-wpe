@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "ma.elmasber.navegadorwpe"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "ma.elmasber.navegadorwpe"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 2
         versionName = "2.0-gecko"
     }
