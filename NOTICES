@@ -1,21 +1,14 @@
 # NOTICES — piezas externas dentro del APK
 
 Este repo (UI, pantallas, lógica de pestañas) es código propio.
-El APK incluye ADEMÁS estas piezas externas precompiladas:
+El APK incluye ADEMÁS esta pieza externa precompilada:
 
-1. Motor WebKit (WPE WebKit: WebCore + JavaScriptCore)
-   - Licencia: GNU LGPL-2.1 (la del motor, puesta por Apple/upstream).
-   - Fuente: https://github.com/WebKit/WebKit
-2. Pegamento Android + .so (`org.wpewebkit.wpeview:wpeview:0.3.3`)
-   - Licencia: GNU LGPL-2.1. © Igalia S.L.
-   - Fuente: https://github.com/Igalia/wpe-android
-   - Binario: https://repo1.maven.org/maven2/org/wpewebkit/wpeview/wpeview/
+- Motor Gecko (Firefox): `org.mozilla.geckoview:geckoview:155.0.20260826195058`
+  - Licencia: Mozilla Public License 2.0 (como dependencia binaria no
+    afecta al código propio; solo avisos).
+  - Fuente: https://github.com/mozilla-firefox/firefox (android GeckoView)
+  - Binario: https://maven.mozilla.org/maven2/org/mozilla/geckoview/geckoview/
 
-Cumplimiento LGPL-2.1 (sección 6) al distribuir este APK:
-- Los .so van como archivos separados en el APK (link dinámico).
-- Este archivo + docs/solo-lib.md dan aviso prominente y apuntan
-  a las fuentes (acceso equivalente al binario).
-- No se agrega anti-tamper que impida reemplazar los .so ni
-  ingeniería inversa para depurarlos.
-
-Texto completo LGPL-2.1: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+Histórico: v1 usó WPE WebKit (LGPL-2.1) vía
+`org.wpewebkit.wpeview:wpeview:0.3.3` — reemplazado por rendimiento
+en hardware real. Ver `docs/solo-lib.md` para esa etapa.

@@ -10,21 +10,28 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import org.wpewebkit.wpeview.WPEChromeClient
-import org.wpewebkit.wpeview.WPEView
-import org.wpewebkit.wpeview.WPEViewClient
+import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoView
 
-// Navegador v1: barra URL + pestañas + menú. UI 100% propia.
-// Motor 0.3.3: WPEView(this) con contexto de Activity (igual que el
-// minibrowser) + LayoutParams MATCH_PARENT explícitos + foco a la página.
+// Navegador v2: barra URL + pestañas + menú sobre GeckoView. UI 100% propia;
+// el motor (GeckoSession/GeckoRuntime) se USA como librería externa.
 class MainActivity : AppCompatActivity() {
 
     companion object {
         const val HOME = "https://duckduckgo.com"
     }
 
-    private data class Pestana(val vista: WPEView, val boton: Button)
+    private data class Pestana(
+        val vista: GeckoView,
+        val sesion: GeckoSession,
+        val boton: Button,
+        var puedeAtras: Boolean = false,
+        var puedeAdelante: Boolean = false,
+    )
 
+    private lateinit var runtime: GeckoRuntime
     private lateinit var contenedor: FrameLayout
     private lateinit var tiraPestanas: LinearLayout
     private lateinit var barraUrl: EditText
@@ -40,6 +47,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        runtime = GeckoRuntime.create(this)
 
         contenedor = findViewById(R.id.contenedor)
         tiraPestanas = findViewById(R.id.tiraPestanas)
@@ -58,10 +67,10 @@ class MainActivity : AppCompatActivity() {
                 false
             }
         }
-        btnAtras.setOnClickListener { activa()?.vista?.goBack() }
-        btnAdelante.setOnClickListener { activa()?.vista?.goForward() }
-        findViewById<Button>(R.id.btnRecargar).setOnClickListener { activa()?.vista?.reload() }
-        findViewById<Button>(R.id.btnHome).setOnClickListener { activa()?.vista?.loadUrl(HOME) }
+        btnAtras.setOnClickListener { activa()?.sesion?.goBack() }
+        btnAdelante.setOnClickListener { activa()?.sesion?.goForward() }
+        findViewById<Button>(R.id.btnRecargar).setOnClickListener { activa()?.sesion?.reload() }
+        findViewById<Button>(R.id.btnHome).setOnClickListener { activa()?.sesion?.loadUri(HOME) }
         findViewById<Button>(R.id.btnCerrar).setOnClickListener { confirmarCerrarEn(actual) }
         findViewById<Button>(R.id.btnLog).setOnClickListener { mostrarLog() }
 
@@ -80,44 +89,57 @@ class MainActivity : AppCompatActivity() {
 
     private fun irDesdeBarra() {
         val p = activa() ?: return
-        p.vista.loadUrl(normalizarUrl(barraUrl.text.toString()))
+        p.sesion.loadUri(normalizarUrl(barraUrl.text.toString()))
         barraUrl.clearFocus()
-        p.vista.requestFocus()
     }
 
     private fun nuevaPestana(url: String) {
-        // Contexto de Activity (no aplicación): métricas de pantalla,
-        // tema e input correctos, igual que el minibrowser.
-        // Cada pestaña dueña de su contexto (destroy lo limpia).
-        val vista = WPEView(this)
-        vista.setWPEViewClient(object : WPEViewClient() {
-            override fun onPageStarted(view: WPEView, url: String) {
+        val sesion = GeckoSession()
+        val vista = GeckoView(this)
+        sesion.open(runtime)
+        vista.setSession(sesion)
+
+        sesion.setNavigationDelegate(object : GeckoSession.NavigationDelegate {
+            override fun onLocationChange(session: GeckoSession, url: String?) {
                 runOnUiThread {
-                    progreso.visibility = View.VISIBLE
-                    if (view == activa()?.vista) barraUrl.setText(url)
+                    if (session == activa()?.sesion && url != null) barraUrl.setText(url)
                 }
             }
 
-            override fun onPageFinished(view: WPEView, url: String) {
+            override fun onCanGoBack(session: GeckoSession, valor: Boolean) {
+                pestanas.firstOrNull { it.sesion == session }?.puedeAtras = valor
+                runOnUiThread { refrescarMenu() }
+            }
+
+            override fun onCanGoForward(session: GeckoSession, valor: Boolean) {
+                pestanas.firstOrNull { it.sesion == session }?.puedeAdelante = valor
+                runOnUiThread { refrescarMenu() }
+            }
+        })
+        sesion.setProgressDelegate(object : GeckoSession.ProgressDelegate {
+            override fun onPageStart(session: GeckoSession, url: String) {
+                runOnUiThread { progreso.visibility = View.VISIBLE }
+            }
+
+            override fun onPageStop(session: GeckoSession, ok: Boolean) {
                 runOnUiThread {
                     progreso.visibility = View.GONE
                     refrescarMenu()
-                    if (view == activa()?.vista) barraUrl.setText(url)
-                }
-            }
-        })
-        vista.setWPEChromeClient(object : WPEChromeClient {
-            override fun onProgressChanged(view: WPEView, nuevo: Int) {
-                runOnUiThread {
-                    progreso.progress = nuevo
-                    if (nuevo >= 100) progreso.visibility = View.GONE
                 }
             }
 
-            override fun onReceivedTitle(view: WPEView, titulo: String) {
+            override fun onProgressChange(session: GeckoSession, valor: Int) {
                 runOnUiThread {
-                    val p = pestanas.firstOrNull { it.vista == view }
-                    if (p != null) {
+                    progreso.progress = valor
+                    if (valor >= 100) progreso.visibility = View.GONE
+                }
+            }
+        })
+        sesion.setContentDelegate(object : GeckoSession.ContentDelegate {
+            override fun onTitleChange(session: GeckoSession, titulo: String?) {
+                runOnUiThread {
+                    val p = pestanas.firstOrNull { it.sesion == session }
+                    if (p != null && titulo != null) {
                         p.boton.text = if (titulo.length > 14) titulo.take(14) + "…" else titulo
                     }
                 }
@@ -127,23 +149,28 @@ class MainActivity : AppCompatActivity() {
         val boton = Button(this)
         boton.text = "…"
         boton.textSize = 11f
-        boton.setOnClickListener { cambiarA(pestanas.indexOfFirst { it.vista == vista }) }
+        boton.setOnClickListener { cambiarA(pestanas.indexOfFirst { it.sesion == sesion }) }
         boton.setOnLongClickListener {
-            cambiarA(pestanas.indexOfFirst { it.vista == vista })
+            cambiarA(pestanas.indexOfFirst { it.sesion == sesion })
             confirmarCerrarEn(actual)
             true
         }
         tiraPestanas.addView(boton)
-        pestanas.add(Pestana(vista, boton))
+        pestanas.add(Pestana(vista, sesion, boton))
         cambiarA(pestanas.size - 1)
-        vista.loadUrl(url)
+        sesion.loadUri(url)
     }
 
     private fun cambiarA(i: Int) {
         if (i < 0 || i >= pestanas.size) return
+        val anterior = activa()
+        if (anterior != null) {
+            anterior.vista.releaseSession()
+            contenedor.removeView(anterior.vista)
+        }
         actual = i
         val p = pestanas[i]
-        contenedor.removeAllViews()
+        p.vista.setSession(p.sesion)
         contenedor.addView(
             p.vista,
             FrameLayout.LayoutParams(
@@ -151,7 +178,7 @@ class MainActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
             ),
         )
-        barraUrl.setText(p.vista.url ?: "")
+        barraUrl.setText("")
         refrescarMenu()
         tiraPestanas.post {
             for ((idx, q) in pestanas.withIndex()) {
@@ -161,9 +188,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refrescarMenu() {
-        val v = activa()?.vista
-        btnAtras.isEnabled = v?.canGoBack() == true
-        btnAdelante.isEnabled = v?.canGoForward() == true
+        val p = activa()
+        btnAtras.isEnabled = p?.puedeAtras == true
+        btnAdelante.isEnabled = p?.puedeAdelante == true
     }
 
     private fun confirmarCerrarEn(i: Int) {
@@ -174,10 +201,13 @@ class MainActivity : AppCompatActivity() {
                 val p = pestanas.removeAt(i)
                 tiraPestanas.removeView(p.boton)
                 contenedor.removeView(p.vista)
-                p.vista.destroy()
+                p.vista.releaseSession()
+                p.sesion.close()
                 if (pestanas.isEmpty()) {
+                    actual = -1
                     nuevaPestana(HOME)
                 } else {
+                    actual = -1
                     cambiarA(i.coerceAtMost(pestanas.size - 1))
                 }
             }
@@ -193,9 +223,8 @@ class MainActivity : AppCompatActivity() {
                 p.waitFor()
                 val lineas = out.lines()
                 val utiles = lineas.filter { l ->
-                    l.contains("wpe", true) || l.contains("WPE") || l.contains("WebKit") ||
-                        l.contains("GStreamer") || l.contains("epc") || l.contains("chromium") ||
-                        l.contains("navegadorwpe") || l.contains("FATAL") || l.contains("lowmemory")
+                    l.contains("gecko", true) || l.contains("Gecko") || l.contains("navegadorwpe") ||
+                        l.contains("FATAL") || l.contains("lowmemory")
                 }
                 (if (utiles.size > 400) utiles.takeLast(400) else utiles).joinToString("\n")
                     .ifEmpty { "(sin líneas del motor; últimas 100)\n" + lineas.takeLast(100).joinToString("\n") }
@@ -216,7 +245,7 @@ class MainActivity : AppCompatActivity() {
                     .setPositiveButton("Copiar") { _, _ ->
                         val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                             as android.content.ClipboardManager
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("wpe-log", texto))
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("gecko-log", texto))
                     }
                     .setNegativeButton("Cerrar", null)
                     .show()
@@ -224,9 +253,10 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    override fun onBackPressed() {        val v = activa()?.vista
-        if (v?.canGoBack() == true) {
-            v.goBack()
+    override fun onBackPressed() {
+        val p = activa()
+        if (p?.puedeAtras == true) {
+            p.sesion.goBack()
         } else {
             super.onBackPressed()
         }
@@ -235,7 +265,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         for (p in pestanas) {
             try {
-                p.vista.destroy()
+                p.vista.releaseSession()
+                p.sesion.close()
             } catch (_: Exception) {
             }
         }
