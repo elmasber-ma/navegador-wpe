@@ -11,12 +11,12 @@ import android.widget.ProgressBar
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import org.wpewebkit.wpeview.WPEChromeClient
-import org.wpewebkit.wpeview.WPEContext
 import org.wpewebkit.wpeview.WPEView
 import org.wpewebkit.wpeview.WPEViewClient
 
 // Navegador v1: barra URL + pestañas + menú. UI 100% propia.
-// Motor 0.3.3: WPEView (API pública completa) + WPEContext compartido.
+// Motor 0.3.3: WPEView(this) con contexto de Activity (igual que el
+// minibrowser) + LayoutParams MATCH_PARENT explícitos + foco a la página.
 class MainActivity : AppCompatActivity() {
 
     companion object {
@@ -24,8 +24,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private data class Pestana(val vista: WPEView, val boton: Button)
-
-    private lateinit var wpeContext: WPEContext
 
     private lateinit var contenedor: FrameLayout
     private lateinit var tiraPestanas: LinearLayout
@@ -42,8 +40,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        wpeContext = WPEContext(applicationContext)
 
         contenedor = findViewById(R.id.contenedor)
         tiraPestanas = findViewById(R.id.tiraPestanas)
@@ -82,11 +78,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun irDesdeBarra() {
-        activa()?.vista?.loadUrl(normalizarUrl(barraUrl.text.toString()))
+        val p = activa() ?: return
+        p.vista.loadUrl(normalizarUrl(barraUrl.text.toString()))
+        barraUrl.clearFocus()
+        p.vista.requestFocus()
     }
 
     private fun nuevaPestana(url: String) {
-        val vista = WPEView(wpeContext)
+        // Contexto de Activity (no aplicación): métricas de pantalla,
+        // tema e input correctos, igual que el minibrowser.
+        // Cada pestaña dueña de su contexto (destroy lo limpia).
+        val vista = WPEView(this)
         vista.setWPEViewClient(object : WPEViewClient() {
             override fun onPageStarted(view: WPEView, url: String) {
                 runOnUiThread {
@@ -141,7 +143,13 @@ class MainActivity : AppCompatActivity() {
         actual = i
         val p = pestanas[i]
         contenedor.removeAllViews()
-        contenedor.addView(p.vista)
+        contenedor.addView(
+            p.vista,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
         barraUrl.setText(p.vista.url ?: "")
         refrescarMenu()
         tiraPestanas.post {
@@ -193,10 +201,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         pestanas.clear()
-        try {
-            wpeContext.destroy()
-        } catch (_: Exception) {
-        }
         super.onDestroy()
     }
 }
