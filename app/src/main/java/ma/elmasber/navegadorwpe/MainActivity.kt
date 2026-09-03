@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun nuevaPestana(url: String) {
-        val vista = WPEView(this, wpeContext)
+        val vista = WPEView(wpeContext)
         vista.setWPEViewClient(object : WPEViewClient() {
             override fun onPageStarted(view: WPEView, url: String) {
                 runOnUiThread {
