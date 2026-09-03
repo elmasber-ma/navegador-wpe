@@ -63,6 +63,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnRecargar).setOnClickListener { activa()?.vista?.reload() }
         findViewById<Button>(R.id.btnHome).setOnClickListener { activa()?.vista?.loadUrl(HOME) }
         findViewById<Button>(R.id.btnCerrar).setOnClickListener { confirmarCerrarEn(actual) }
+        findViewById<Button>(R.id.btnLog).setOnClickListener { mostrarLog() }
 
         nuevaPestana(HOME)
     }
@@ -184,8 +185,46 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    override fun onBackPressed() {
-        val v = activa()?.vista
+    private fun mostrarLog() {
+        Thread {
+            val texto = try {
+                val p = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "brief"))
+                val out = p.inputStream.bufferedReader().readText()
+                p.waitFor()
+                val lineas = out.lines()
+                val utiles = lineas.filter { l ->
+                    l.contains("wpe", true) || l.contains("WPE") || l.contains("WebKit") ||
+                        l.contains("GStreamer") || l.contains("epc") || l.contains("chromium") ||
+                        l.contains("navegadorwpe") || l.contains("FATAL") || l.contains("lowmemory")
+                }
+                (if (utiles.size > 400) utiles.takeLast(400) else utiles).joinToString("\n")
+                    .ifEmpty { "(sin líneas del motor; últimas 100)\n" + lineas.takeLast(100).joinToString("\n") }
+            } catch (e: Exception) {
+                "no se pudo leer logcat: $e"
+            }
+            runOnUiThread {
+                val tv = android.widget.TextView(this)
+                tv.text = texto
+                tv.textSize = 10f
+                tv.setTextIsSelectable(true)
+                tv.setPadding(16, 16, 16, 16)
+                val sv = android.widget.ScrollView(this)
+                sv.addView(tv)
+                AlertDialog.Builder(this)
+                    .setTitle("Log del motor (pegámelo)")
+                    .setView(sv)
+                    .setPositiveButton("Copiar") { _, _ ->
+                        val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                            as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("wpe-log", texto))
+                    }
+                    .setNegativeButton("Cerrar", null)
+                    .show()
+            }
+        }.start()
+    }
+
+    override fun onBackPressed() {        val v = activa()?.vista
         if (v?.canGoBack() == true) {
             v.goBack()
         } else {
