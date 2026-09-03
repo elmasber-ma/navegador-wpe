@@ -202,10 +202,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         pestanas.clear()
-        try {
-            webContext.destroy()
-        } catch (_: Exception) {
-        }
+        // Sin webContext.destroy(): no existe en wpeview 0.3.3 (solo en main).
         super.onDestroy()
     }
 }
