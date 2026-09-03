@@ -10,22 +10,22 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import org.wpewebkit.wpe.WKWebView
 import org.wpewebkit.wpeview.WPEChromeClient
-import org.wpewebkit.wpeview.WPEContext
 import org.wpewebkit.wpeview.WPEView
 import org.wpewebkit.wpeview.WPEViewClient
 
-// Navegador v1: barra URL + pestañas + menú. UI 100% propia;
-// el motor (WPEView/WPEContext) se USA como librería externa (0.3.3).
+// Navegador v1: barra URL + pestañas + menú. UI 100% propia.
+// Motor 0.3.3 (compilado): WPEView = surface (crea su propio contexto),
+// API real en WKWebView vía getWKWebView().
 class MainActivity : AppCompatActivity() {
 
     companion object {
         const val HOME = "https://duckduckgo.com"
     }
 
-    private data class Pestana(val vista: WPEView, val boton: Button)
+    private data class Pestana(val vista: WPEView, val wk: WKWebView, val boton: Button)
 
-    private lateinit var wpeContext: WPEContext
     private lateinit var contenedor: FrameLayout
     private lateinit var tiraPestanas: LinearLayout
     private lateinit var barraUrl: EditText
@@ -41,8 +41,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        wpeContext = WPEContext(applicationContext)
 
         contenedor = findViewById(R.id.contenedor)
         tiraPestanas = findViewById(R.id.tiraPestanas)
@@ -61,11 +59,11 @@ class MainActivity : AppCompatActivity() {
                 false
             }
         }
-        btnAtras.setOnClickListener { activa()?.vista?.goBack() }
-        btnAdelante.setOnClickListener { activa()?.vista?.goForward() }
-        findViewById<Button>(R.id.btnRecargar).setOnClickListener { activa()?.vista?.reload() }
-        findViewById<Button>(R.id.btnHome).setOnClickListener { activa()?.vista?.loadUrl(HOME) }
-        findViewById<Button>(R.id.btnCerrar).setOnClickListener { cerrarActual() }
+        btnAtras.setOnClickListener { activa()?.wk?.goBack() }
+        btnAdelante.setOnClickListener { activa()?.wk?.goForward() }
+        findViewById<Button>(R.id.btnRecargar).setOnClickListener { activa()?.wk?.reload() }
+        findViewById<Button>(R.id.btnHome).setOnClickListener { activa()?.wk?.loadUrl(HOME) }
+        findViewById<Button>(R.id.btnCerrar).setOnClickListener { confirmarCerrarEn(actual) }
 
         nuevaPestana(HOME)
     }
@@ -81,12 +79,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun irDesdeBarra() {
-        activa()?.vista?.loadUrl(normalizarUrl(barraUrl.text.toString()))
+        activa()?.wk?.loadUrl(normalizarUrl(barraUrl.text.toString()))
     }
 
     private fun nuevaPestana(url: String) {
-        val vista = WPEView(this, wpeContext)
-        vista.setWPEViewClient(object : WPEViewClient() {
+        val vista = WPEView(this)
+        val wk = vista.wkWebView
+        wk.setWPEViewClient(object : WPEViewClient() {
             override fun onPageStarted(view: WPEView, url: String) {
                 runOnUiThread {
                     progreso.visibility = View.VISIBLE
@@ -102,7 +101,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         })
-        vista.setWPEChromeClient(object : WPEChromeClient {
+        wk.setWPEChromeClient(object : WPEChromeClient {
             override fun onProgressChanged(view: WPEView, nuevo: Int) {
                 runOnUiThread {
                     progreso.progress = nuevo
@@ -130,9 +129,9 @@ class MainActivity : AppCompatActivity() {
             true
         }
         tiraPestanas.addView(boton)
-        pestanas.add(Pestana(vista, boton))
+        pestanas.add(Pestana(vista, wk, boton))
         cambiarA(pestanas.size - 1)
-        vista.loadUrl(url)
+        wk.loadUrl(url)
     }
 
     private fun cambiarA(i: Int) {
@@ -141,7 +140,7 @@ class MainActivity : AppCompatActivity() {
         val p = pestanas[i]
         contenedor.removeAllViews()
         contenedor.addView(p.vista)
-        barraUrl.setText(p.vista.url ?: "")
+        barraUrl.setText(p.wk.url ?: "")
         refrescarMenu()
         tiraPestanas.post {
             for ((idx, q) in pestanas.withIndex()) {
@@ -151,13 +150,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refrescarMenu() {
-        val v = activa()?.vista
-        btnAtras.isEnabled = v?.canGoBack() == true
-        btnAdelante.isEnabled = v?.canGoForward() == true
-    }
-
-    private fun cerrarActual() {
-        confirmarCerrarEn(actual)
+        val w = activa()?.wk
+        btnAtras.isEnabled = w?.canGoBack() == true
+        btnAdelante.isEnabled = w?.canGoForward() == true
     }
 
     private fun confirmarCerrarEn(i: Int) {
@@ -180,9 +175,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
-        val v = activa()?.vista
-        if (v?.canGoBack() == true) {
-            v.goBack()
+        val w = activa()?.wk
+        if (w?.canGoBack() == true) {
+            w.goBack()
         } else {
             super.onBackPressed()
         }
@@ -196,10 +191,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         pestanas.clear()
-        try {
-            wpeContext.destroy()
-        } catch (_: Exception) {
-        }
         super.onDestroy()
     }
 }
