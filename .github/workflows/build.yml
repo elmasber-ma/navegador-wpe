@@ -28,15 +28,25 @@ jobs:
         with:
           packages: "platform-tools platforms;android-35 build-tools;35.0.0"
 
+      - name: Build APK (Gradle)
+        continue-on-error: true
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: 8.14.3
+          arguments: :app:compileDebugKotlin
+
       - name: Debug wpeview API real
+        if: always()
         run: |
-          find ~/.gradle -name "wpeview-*.aar" 2>/dev/null
-          AAR=$(find ~/.gradle -name "wpeview-*.aar" 2>/dev/null | head -n 1)
+          echo "GRADLE_USER_HOME=$GRADLE_USER_HOME"
+          AAR=$(find "${GRADLE_USER_HOME:-~/.gradle}" -name "wpeview-*.aar" 2>/dev/null | head -n 1)
           echo "AAR=$AAR"
+          ls -la "$AAR"
+          rm -rf /tmp/wpedbg && mkdir -p /tmp/wpedbg
           unzip -o -q "$AAR" classes.jar -d /tmp/wpedbg
           javap -classpath /tmp/wpedbg/classes.jar org.wpewebkit.wpeview.WPEView | head -n 40
 
-      - name: Build APK (Gradle)
+      - name: Build APK (Gradle full)
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 8.14.3
