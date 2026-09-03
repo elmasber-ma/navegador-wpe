@@ -100,7 +100,12 @@ class MainActivity : AppCompatActivity() {
         vista.setSession(sesion)
 
         sesion.setNavigationDelegate(object : GeckoSession.NavigationDelegate {
-            override fun onLocationChange(session: GeckoSession, url: String?) {
+            override fun onLocationChange(
+                session: GeckoSession,
+                url: String?,
+                permisos: List<GeckoSession.PermissionDelegate.ContentPermission>,
+                gesto: Boolean,
+            ) {
                 runOnUiThread {
                     if (session == activa()?.sesion && url != null) barraUrl.setText(url)
                 }
